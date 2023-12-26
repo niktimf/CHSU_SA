@@ -10,7 +10,8 @@ pub struct SMO {
     mu: i32,     // Интенсивность обработки одним офицером
     num_channels: i32, // Количество офицеров
     queue_size: i32, // Ограничение на размер очереди
-    initial_state: Arc<HashMap<&'static str, i32>>,
+    initial_state: Arc<HashMap<&'static str, i32>>, // Начальное состояние
+    time: i32 // Время
 }
 
 impl SMO {
@@ -18,7 +19,8 @@ impl SMO {
                mu: i32,
                num_channels: i32,
                queue_size: i32,
-               initial_state: Arc<HashMap<&'static str, i32>>
+               initial_state: Arc<HashMap<&'static str, i32>>,
+               time: i32
     ) -> SMO {
 
         SMO {
@@ -27,6 +29,7 @@ impl SMO {
             num_channels,
             queue_size,
             initial_state,
+            time
         }
     }
 
@@ -124,6 +127,44 @@ impl SMO {
         root_area.present()?;
 
         Ok(())
+    }
+
+    pub fn generate_kolmogorov_matrix(&self) -> Vec<Vec<i32>> {
+        let lambda = self.lambda;
+        let mu = self.mu;
+        let num_channels_i32 = self.num_channels;
+        let num_channels_usize = self.num_channels as usize;
+        let queue_size = self.queue_size as usize;
+        let queue_max_index = num_channels_usize + queue_size;
+        let number_of_states = queue_max_index + 1;
+
+        let mut matrix = vec![vec![0; number_of_states]; number_of_states];
+
+        // Обработка для каналов
+        (0..num_channels_usize).for_each(|i| {
+            (0..=i).for_each(|j| {
+                matrix[i][j] = match j {
+                    j if i > 0 && j == i - 1 => lambda,
+                    j if j == i => - (lambda + (j as i32) * mu),
+                    j if j == i + 1 => (j as i32) * mu,
+                    _ => 0,
+                };
+            });
+        });
+
+        // Обработка для очереди
+        (num_channels_usize..=queue_max_index).for_each(|i| {
+            (num_channels_usize..=queue_max_index).for_each(|j| {
+                matrix[i][j] = match j {
+                    j if j == i - 1 => lambda,
+                    j if j == i => - (lambda + num_channels_i32 * mu),
+                    j if j == i + 1 && i != queue_max_index => num_channels_i32 * mu,
+                    _ => 0,
+                };
+            });
+        });
+
+        matrix
     }
 
 }
