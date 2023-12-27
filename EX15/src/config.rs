@@ -10,7 +10,9 @@ pub struct Config {
     pub lambda_rate: i32,
     pub mu_rate: i32,
     pub initial_state: Arc<HashMap<&'static str, i32>>,
-    pub time: i32
+    pub time: i32,
+    pub num_iterations: i32,
+    pub step_size: f64
 }
 
 lazy_static! {
@@ -31,7 +33,9 @@ lazy_static! {
             ].into_iter().collect();
             states
         }),
-        time: 1
+        time: 1,
+        num_iterations: 100,
+        step_size: 0.01
     };
 }
 

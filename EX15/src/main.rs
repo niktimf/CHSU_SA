@@ -16,10 +16,21 @@ fn main() {
         SMO_CONFIG.num_channels,
         SMO_CONFIG.queue_size,
         Arc::clone(&SMO_CONFIG.initial_state),
-        SMO_CONFIG.time
+        SMO_CONFIG.time,
+        SMO_CONFIG.num_iterations,
+        SMO_CONFIG.step_size
     );
     //smo.plot_state_graph().expect("Failed to plot state graph");
 
     let transition_matrix = smo.generate_kolmogorov_matrix();
     println!("{:?}", transition_matrix);
+
+
+    let f_tx = smo.multiply_matrix_vector(
+        transition_matrix,
+        Arc::clone(&SMO_CONFIG.initial_state)
+    );
+
+    println!("{:?}", f_tx);
+
 }

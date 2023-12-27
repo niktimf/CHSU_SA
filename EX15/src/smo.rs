@@ -1,9 +1,12 @@
 use std::collections::HashMap;
-use std::rc::Rc;
+
 use std::sync::Arc;
+use nalgebra::{DMatrix, DVector, Dyn, OVector};
+use ndarray::{Array1, Array2};
 use plotters::coord::Shift;
 use plotters::prelude::*;
-use crate::config::SmoError;
+use crate::config::{SMO_CONFIG};
+
 
 pub struct SMO {
     lambda: i32, // Интенсивность потока заявок
@@ -11,7 +14,9 @@ pub struct SMO {
     num_channels: i32, // Количество офицеров
     queue_size: i32, // Ограничение на размер очереди
     initial_state: Arc<HashMap<&'static str, i32>>, // Начальное состояние
-    time: i32 // Время
+    time: i32, // Время
+    num_iterations: i32, // Количество итерации
+    step_size: f64 // Шаг
 }
 
 impl SMO {
@@ -20,7 +25,10 @@ impl SMO {
                num_channels: i32,
                queue_size: i32,
                initial_state: Arc<HashMap<&'static str, i32>>,
-               time: i32
+               time: i32,
+               num_iterations: i32,
+               step_size: f64
+
     ) -> SMO {
 
         SMO {
@@ -29,7 +37,9 @@ impl SMO {
             num_channels,
             queue_size,
             initial_state,
-            time
+            time,
+            num_iterations,
+            step_size
         }
     }
 
@@ -166,6 +176,71 @@ impl SMO {
 
         matrix
     }
+
+    fn initial_state_to_dvector(initial_state: Arc<HashMap<&'static str, i32>>) -> DVector<f64> {
+        DVector::from_iterator(
+            initial_state.len(),
+            initial_state
+                .values()
+                .map(|&val| val as f64)
+        )
+    }
+
+    fn initial_state_to_ovector(initial_state: Arc<HashMap<&'static str, i32>>) -> OVector<f64, Dyn> {
+        let values: Vec<f64> = initial_state
+            .iter()
+            .map(|(_key, &value)| value as f64)
+            .collect();
+
+        OVector::<f64, Dyn>::from_column_slice(&values)
+    }
+
+    // Функция для преобразования Vec<Vec<i32>> в DMatrix<f64>
+    fn kolmogorov_matrix_to_dmatrix(matrix: Vec<Vec<i32>>) -> DMatrix<f64> {
+        let rows = matrix.len();
+        let cols = matrix.first().map_or(0, Vec::len);
+
+        DMatrix::from_iterator(
+            rows, cols,
+            matrix.into_iter().flatten().map(|val| val as f64)
+        )
+    }
+
+    pub fn multiply_matrix_vector(&self, kolmogorov_matrix: Vec<Vec<i32>>, initial_state: Arc<HashMap<&'static str, i32>>) -> DVector<f64> {
+        let b = Self::kolmogorov_matrix_to_dmatrix(kolmogorov_matrix);
+        let x = Self::initial_state_to_dvector(initial_state);
+
+        b * x
+    }
+
+    pub fn integrate_system(&self, f_tx: DVector<f64>) -> Result<Vec<(f64, OVector<f64, Dyn>)>, &'static str> {
+        let T_0 = 0.0; // Начальное время
+        let T_1 = self.time as f64; // Конечное время
+        let n = self.num_iterations; // Число шагов
+        let step_size = self.step_size; // Шаг
+
+        let initial_state = Self::initial_state_to_ovector(
+            Arc::clone(&SMO_CONFIG.initial_state)
+        );
+
+        //let mut rk4 = Rk4::new(f_tx, T_0, initial_state, T_1, step_size);
+
+        // Определение системы уравнений
+        let system = move |t: f64, y: &OVector<f64, Dyn>, dy: &mut OVector<f64, Dyn>| {
+            *dy = &DVector::from_column_slice(&f_tx.iter().map(|&val| val).collect::<Vec<f64>>()) * y;
+        };
+
+        // Создание интегратора RK4
+        let mut rk4 = Rk4::new(system, T_0, initial_state, T_1, step_size);
+
+        // Интегрирование
+        //rk4.integrate()
+            //.map_err(|_| "Ошибка при интегрировании")
+            //.map(|_| rk4.y_out().iter().map(|y| (y.0, y.1.clone())).collect()) // Возвращаем результаты интегрирования
+    }
+
+
+
 
 }
 
