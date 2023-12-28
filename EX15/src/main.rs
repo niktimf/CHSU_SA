@@ -23,7 +23,7 @@ fn main() {
     //smo.plot_state_graph().expect("Failed to plot state graph");
 
     let transition_matrix = smo.generate_kolmogorov_matrix();
-    println!("{:?}", transition_matrix);
+    //println!("{:?}", transition_matrix);
 
 
     let f_tx = smo.multiply_matrix_vector(
@@ -33,4 +33,8 @@ fn main() {
 
     println!("{:?}", f_tx);
 
+    let states = smo.integrate_system();
+    //println!("{:?}", states);
+
+    //smo.plot_states(states).expect("Failed to plot states");
 }

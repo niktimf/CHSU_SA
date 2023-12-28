@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use std::sync::Arc;
 use nalgebra::{DMatrix, DVector, Dyn, OVector};
 use ndarray::{Array1, Array2};
+use peroxide::prelude::{ExMethod, State};
 use plotters::coord::Shift;
 use plotters::prelude::*;
 use crate::config::{SMO_CONFIG};
@@ -13,7 +15,7 @@ pub struct SMO {
     mu: i32,     // Интенсивность обработки одним офицером
     num_channels: i32, // Количество офицеров
     queue_size: i32, // Ограничение на размер очереди
-    initial_state: Arc<HashMap<&'static str, i32>>, // Начальное состояние
+    initial_state: Arc<Vec<(&'static str, i32)>>, // Начальное состояние
     time: i32, // Время
     num_iterations: i32, // Количество итерации
     step_size: f64 // Шаг
@@ -24,7 +26,7 @@ impl SMO {
                mu: i32,
                num_channels: i32,
                queue_size: i32,
-               initial_state: Arc<HashMap<&'static str, i32>>,
+               initial_state: Arc<Vec<(&'static str, i32)>>,
                time: i32,
                num_iterations: i32,
                step_size: f64
@@ -177,19 +179,19 @@ impl SMO {
         matrix
     }
 
-    fn initial_state_to_dvector(initial_state: Arc<HashMap<&'static str, i32>>) -> DVector<f64> {
-        DVector::from_iterator(
-            initial_state.len(),
-            initial_state
-                .values()
-                .map(|&val| val as f64)
-        )
-    }
-
-    fn initial_state_to_ovector(initial_state: Arc<HashMap<&'static str, i32>>) -> OVector<f64, Dyn> {
+    fn initial_state_to_dvector(initial_state: Arc<Vec<(&'static str, i32)>>) -> DVector<f64> {
         let values: Vec<f64> = initial_state
             .iter()
-            .map(|(_key, &value)| value as f64)
+            .map(|(_key, value)| *value as f64)
+            .collect();
+
+        DVector::from_vec(values)
+    }
+
+    fn initial_state_to_ovector(initial_state: Arc<Vec<(&'static str, i32)>>) -> OVector<f64, Dyn> {
+        let values: Vec<f64> = initial_state
+            .iter()
+            .map(|(_key, value)| *value as f64)
             .collect();
 
         OVector::<f64, Dyn>::from_column_slice(&values)
@@ -206,37 +208,77 @@ impl SMO {
         )
     }
 
-    pub fn multiply_matrix_vector(&self, kolmogorov_matrix: Vec<Vec<i32>>, initial_state: Arc<HashMap<&'static str, i32>>) -> DVector<f64> {
+    pub fn multiply_matrix_vector(&self, kolmogorov_matrix: Vec<Vec<i32>>, initial_state: Arc<Vec<(&'static str, i32)>>) -> DVector<f64> {
         let b = Self::kolmogorov_matrix_to_dmatrix(kolmogorov_matrix);
         let x = Self::initial_state_to_dvector(initial_state);
+        //println!("{:?}", b);
+        //println!("{:?}", x);
 
         b * x
     }
 
-    pub fn integrate_system(&self, f_tx: DVector<f64>) -> Result<Vec<(f64, OVector<f64, Dyn>)>, &'static str> {
-        let T_0 = 0.0; // Начальное время
-        let T_1 = self.time as f64; // Конечное время
-        let n = self.num_iterations; // Число шагов
-        let step_size = self.step_size; // Шаг
 
-        let initial_state = Self::initial_state_to_ovector(
-            Arc::clone(&SMO_CONFIG.initial_state)
-        );
+    pub fn integrate_system(&self, /*f_tx: DVector<f64>*/) -> Vec<DVector<f64>> {
+        let kolmogorov_matrix = Self::kolmogorov_matrix_to_dmatrix(self.generate_kolmogorov_matrix());
+        let initial_state_vec = Self::initial_state_to_dvector(Arc::clone(&SMO_CONFIG.initial_state));
+        let delta_t = SMO_CONFIG.step_size;
 
-        //let mut rk4 = Rk4::new(f_tx, T_0, initial_state, T_1, step_size);
+        let mut states = vec![initial_state_vec];
+        let mut t = 0.0;
 
-        // Определение системы уравнений
-        let system = move |t: f64, y: &OVector<f64, Dyn>, dy: &mut OVector<f64, Dyn>| {
-            *dy = &DVector::from_column_slice(&f_tx.iter().map(|&val| val).collect::<Vec<f64>>()) * y;
-        };
+        for _ in 0..SMO_CONFIG.num_iterations {
+            let last_state = states.last().unwrap().clone();
+            let next_state = self.runge_kutta4_step(&last_state, &kolmogorov_matrix, t,delta_t);
+            states.push(next_state);
+            t += delta_t;
+        }
 
-        // Создание интегратора RK4
-        let mut rk4 = Rk4::new(system, T_0, initial_state, T_1, step_size);
+        states
+    }
 
-        // Интегрирование
-        //rk4.integrate()
-            //.map_err(|_| "Ошибка при интегрировании")
-            //.map(|_| rk4.y_out().iter().map(|y| (y.0, y.1.clone())).collect()) // Возвращаем результаты интегрирования
+    // Метод Рунге-Кутты 4-го порядка для одного шага
+    fn runge_kutta4_step(&self, state: &DVector<f64>, matrix: &DMatrix<f64>, t: f64, dt: f64) -> DVector<f64> {
+        let k1 = matrix * state;
+        let k2 = matrix * &(state + &k1 * (dt / 2.0));
+        let k3 = matrix * &(state + &k2 * (dt / 2.0));
+        let k4 = matrix * &(state + &k3 * dt);
+
+        state + &k1 * (dt / 6.0) + &k2 * (dt / 3.0) + &k3 * (dt / 3.0) + &k4 * (dt / 6.0)
+    }
+
+    pub fn plot_states(&self, states: Vec<DVector<f64>>) -> Result<(), Box<dyn std::error::Error>> {
+        let root_area = BitMapBackend::new("channels_states.png", (1024, 768)).into_drawing_area();
+        root_area.fill(&WHITE)?;
+
+        let num_states = states.first().map_or(0, |v| v.len());
+        let num_steps = states.len();
+
+        let max_y = states.iter().flatten().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let min_y = states.iter().flatten().cloned().fold(f64::INFINITY, f64::min);
+
+        let mut chart = ChartBuilder::on(&root_area)
+            .caption("System States Over Time", ("sans-serif", 50).into_font())
+            .margin(10)
+            .x_label_area_size(30)
+            .y_label_area_size(30)
+            .build_cartesian_2d(0..num_steps, min_y..max_y)?;
+
+        chart.configure_mesh().draw()?;
+
+        let colors = [
+            &RED, &GREEN, &BLUE, &YELLOW, &CYAN, &MAGENTA, &BLACK,
+            // Дополнительные цвета, если у вас больше состояний
+        ];
+
+        for i in 0..num_states {
+            chart.draw_series(LineSeries::new(
+                states.iter().enumerate().map(|(step, state)| (step, state[i])),
+                colors[i % colors.len()],
+            ))?;
+        }
+
+        root_area.present()?;
+        Ok(())
     }
 
 
