@@ -16,7 +16,7 @@ pub struct Config {
 }
 
 lazy_static! {
-    pub static ref SMO_CONFIG: Config = Config {
+    pub static ref QUEUING_SYSTEM_CONFIG: Config = Config {
         num_channels: 3,
         queue_size: 3,
         lambda_rate: 30,
@@ -30,27 +30,12 @@ lazy_static! {
             ("S_5", 0),
             ("S_6", 0),
         ]),
-        /*
-        initial_state: Arc::new({
-                let states = vec![
-                ("S_0", 1),
-                ("S_1", 0),
-                ("S_2", 0),
-                ("S_3", 0),
-                ("S_4", 0),
-                ("S_5", 0),
-                ("S_6", 0),
-            ].into_iter().collect();
-            states
-        }),
-
-         */
         time: 1,
         num_iterations: 100,
         step_size: 0.01
     };
 }
 
-pub enum SmoError {
+pub enum QueuingSystemError {
 
 }

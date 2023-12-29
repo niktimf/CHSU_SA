@@ -1,40 +1,32 @@
 
 use std::sync::Arc;
-use crate::config::SMO_CONFIG;
-use crate::smo::SMO;
+use crate::config::QUEUING_SYSTEM_CONFIG;
+use crate::queuing_system::QueuingSystem;
 
 mod config;
-mod smo;
-mod smo_characteristics;
+mod queuing_system;
+mod queuing_system_characteristics;
 
 
 fn main() {
 
-    let smo = SMO::new(
-        SMO_CONFIG.lambda_rate,
-        SMO_CONFIG.mu_rate,
-        SMO_CONFIG.num_channels,
-        SMO_CONFIG.queue_size,
-        Arc::clone(&SMO_CONFIG.initial_state),
-        SMO_CONFIG.time,
-        SMO_CONFIG.num_iterations,
-        SMO_CONFIG.step_size
+    let queuing_system = QueuingSystem::new(
+        QUEUING_SYSTEM_CONFIG.lambda_rate,
+        QUEUING_SYSTEM_CONFIG.mu_rate,
+        QUEUING_SYSTEM_CONFIG.num_channels,
+        QUEUING_SYSTEM_CONFIG.queue_size,
+        Arc::clone(&QUEUING_SYSTEM_CONFIG.initial_state),
+        QUEUING_SYSTEM_CONFIG.time,
+        QUEUING_SYSTEM_CONFIG.num_iterations,
+        QUEUING_SYSTEM_CONFIG.step_size
     );
-    //smo.plot_state_graph().expect("Failed to plot state graph");
+    //queuing_system.plot_state_graph().expect("Failed to plot state graph");
 
-    let transition_matrix = smo.generate_kolmogorov_matrix();
-    //println!("{:?}", transition_matrix);
+    let matrix = queuing_system.generate_kolmogorov_matrix();
+    //println!("{:?}", matrix);
 
+    let states = queuing_system.integrate_system();
+    //println!("{:#?}", states);
 
-    let f_tx = smo.multiply_matrix_vector(
-        transition_matrix,
-        Arc::clone(&SMO_CONFIG.initial_state)
-    );
-
-    println!("{:?}", f_tx);
-
-    let states = smo.integrate_system();
-    //println!("{:?}", states);
-
-    //smo.plot_states(states).expect("Failed to plot states");
+    queuing_system.plot_states(states).expect("Failed to plot states");
 }
