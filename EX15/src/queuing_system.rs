@@ -1,30 +1,26 @@
-use std::collections::HashMap;
-use std::rc::Rc;
 
 use std::sync::Arc;
-use nalgebra::{DMatrix, DVector, Dyn, OVector};
+use nalgebra::{DMatrix, DVector};
 use std::cmp::Ordering::{Equal, Greater, Less};
-use ndarray::{Array1, Array2};
-use peroxide::prelude::{ExMethod, State};
-use plotters::coord::Shift;
+
 use plotters::prelude::*;
 use crate::config::{QUEUING_SYSTEM_CONFIG};
 
 
 pub struct QueuingSystem {
-    lambda: i32, // Интенсивность потока заявок
-    mu: i32,     // Интенсивность обработки одним офицером
-    num_channels: i32, // Количество офицеров
-    queue_size: i32, // Ограничение на размер очереди
-    initial_state: Arc<Vec<(&'static str, i32)>>, // Начальное состояние
-    time: i32, // Время
-    num_iterations: i32, // Количество итерации
-    step_size: f64 // Шаг
+    pub lambda_rate: i32, // Интенсивность потока заявок
+    pub mu_rate: i32,     // Интенсивность обработки одним офицером
+    pub num_channels: i32, // Количество офицеров
+    pub queue_size: i32, // Ограничение на размер очереди
+    pub initial_state: Arc<Vec<(&'static str, i32)>>, // Начальное состояние
+    pub time: i32, // Время
+    pub num_iterations: i32, // Количество итерации
+    pub step_size: f64 // Шаг
 }
 
 impl QueuingSystem {
-    pub fn new(lambda: i32,
-               mu: i32,
+    pub fn new(lambda_rate: i32,
+               mu_rate: i32,
                num_channels: i32,
                queue_size: i32,
                initial_state: Arc<Vec<(&'static str, i32)>>,
@@ -35,8 +31,8 @@ impl QueuingSystem {
     ) -> QueuingSystem {
 
         QueuingSystem {
-            lambda,
-            mu,
+            lambda_rate,
+            mu_rate,
             num_channels,
             queue_size,
             initial_state,
@@ -103,7 +99,7 @@ impl QueuingSystem {
                 ))?;
 
                 root_area.draw_text(
-                    &format!("λ = {}", self.lambda),
+                    &format!("λ = {}", self.lambda_rate),
                     &text_style.color(&BLUE),
                     (mid_arrow_x - 20, (step_y - rect_height / 2.0 - 40.0) as i32), // Смещение текста на 50 пикселей вверх от середины стрелки
                 )?;
@@ -116,7 +112,7 @@ impl QueuingSystem {
                 let arrow_end_x = arrow_start_x - dynamic_arrow_length as i32 + arrow_height;
 
                 let mid_arrow_x = arrow_end_x + dynamic_arrow_length as i32 / 2;
-                let mu_value = i * self.mu as usize;
+                let mu_rate_value = i * self.mu_rate as usize;
 
                 // Красная стрелка
                 root_area.draw(&PathElement::new(
@@ -130,7 +126,7 @@ impl QueuingSystem {
                 ))?;
 
                 root_area.draw_text(
-                    &format!("μ = {:.1}", mu_value),
+                    &format!("μ = {:.1}", mu_rate_value),
                     &text_style.color(&RED),
                     (mid_arrow_x - 20, (step_y + rect_height / 2.0 + 20.0) as i32), // Смещение текста на 30 пикселей вниз от середины стрелки
                 )?;
@@ -143,8 +139,8 @@ impl QueuingSystem {
     }
 
     pub fn generate_kolmogorov_matrix(&self) -> Vec<Vec<i32>> {
-        let lambda = self.lambda;
-        let mu = self.mu;
+        let lambda_rate = self.lambda_rate;
+        let mu_rate = self.mu_rate;
         let num_channels_i32 = self.num_channels;
         let num_channels_usize = self.num_channels as usize;
         let queue_size = self.queue_size as usize;
@@ -155,15 +151,15 @@ impl QueuingSystem {
             (0..number_of_states).map(|j| {
                 match i.cmp(&j) {
                     Equal => match i {
-                        0 => - lambda,
-                        _ if i < num_channels_usize => - (lambda + i as i32 * mu),
-                        _ => - (lambda + num_channels_i32 * mu),
+                        0 => - lambda_rate,
+                        _ if i < num_channels_usize => - (lambda_rate + i as i32 * mu_rate),
+                        _ => - (lambda_rate + num_channels_i32 * mu_rate),
                     },
                     Less => match j {
-                        j if j == i + 1 => if i < num_channels_usize { (i as i32 + 1) * mu } else { num_channels_i32 * mu },
+                        j if j == i + 1 => if i < num_channels_usize { (i as i32 + 1) * mu_rate } else { num_channels_i32 * mu_rate },
                         _ => 0,
                     },
-                    Greater => if j == i - 1 { lambda } else { 0 },
+                    Greater => if j == i - 1 { lambda_rate } else { 0 },
                 }
             }).collect()
         }).collect()
@@ -177,20 +173,6 @@ impl QueuingSystem {
 
         DVector::from_vec(values)
     }
-
-
-/*
-    fn initial_state_to_ovector(initial_state: Arc<Vec<(&'static str, i32)>>) -> OVector<f64, Dyn> {
-        let values: Vec<f64> = initial_state
-            .iter()
-            .map(|(_key, value)| *value as f64)
-            .collect();
-
-        OVector::<f64, Dyn>::from_column_slice(&values)
-    }
-
- */
-
 
     // Функция для преобразования Vec<Vec<i32>> в DMatrix<f64>
     fn kolmogorov_matrix_to_dmatrix(matrix: Vec<Vec<i32>>) -> DMatrix<f64> {
@@ -206,7 +188,7 @@ impl QueuingSystem {
     }
 
     // Функция f(t, x), возвращающая производную состояния
-    fn f(t: f64, state: &DVector<f64>, matrix: &DMatrix<f64>) -> DVector<f64> {
+    fn f(_t: f64, state: &DVector<f64>, matrix: &DMatrix<f64>) -> DVector<f64> {
         matrix * state
     }
 
@@ -218,6 +200,8 @@ impl QueuingSystem {
         let k4 = Self::f(t + dt, &(state + &k3 * dt), matrix);
 
         let new_state = state + &k1 * (dt / 6.0) + &k2 * (dt / 3.0) + &k3 * (dt / 3.0) + &k4 * (dt / 6.0);
+
+        // Нормализация нового состояния
         let sum: f64 = new_state.iter().sum();
         new_state / sum
     }
@@ -289,9 +273,6 @@ impl QueuingSystem {
         root_area.present()?;
         Ok(())
     }
-
-
-
 
 }
 

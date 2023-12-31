@@ -1,6 +1,5 @@
-use thiserror::Error;
+
 use lazy_static::lazy_static;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -34,8 +33,4 @@ lazy_static! {
         num_iterations: 100,
         step_size: 0.01
     };
-}
-
-pub enum QueuingSystemError {
-
 }
