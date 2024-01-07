@@ -14,6 +14,7 @@ pub struct Config {
     pub step_size: f64
 }
 
+/// Инициализация начальных даанных из условий задачи
 lazy_static! {
     pub static ref QUEUING_SYSTEM_CONFIG: Config = Config {
         num_channels: 3,
