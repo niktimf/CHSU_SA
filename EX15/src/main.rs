@@ -21,13 +21,14 @@ fn main() {
         QUEUING_SYSTEM_CONFIG.num_iterations,
         QUEUING_SYSTEM_CONFIG.step_size
     );
+    
     //queuing_system.plot_state_graph().expect("Failed to plot state graph");
 
     let matrix = queuing_system.generate_kolmogorov_matrix();
     println!("Правые части уравнений Колмогорова: {:?}", matrix);
 
-    //let states = queuing_system.integrate_system();
-    // println!("{:#?}", states);
+    let states = queuing_system.integrate_system();
+    println!("{:#?}", states);
 
     //queuing_system.plot_states(states).expect("Failed to plot states");
 
